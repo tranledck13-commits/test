@@ -41,6 +41,7 @@ function extractShopeeIds(rawUrl) {
 function normalizeShopeeProductUrl(rawUrl) {
   const { shopId, itemId } = extractShopeeIds(rawUrl);
   if (!shopId || !itemId) return rawUrl;
+
   return `https://shopee.vn/product/${shopId}/${itemId}`;
 }
 
@@ -85,41 +86,23 @@ async function getProductData(shopeeUrl) {
   return await res.json();
 }
 
-function buildProductInfo(data, resolvedUrl) {
+function pickProductInfo(data, resolvedUrl) {
   const source = data?.productInfo || {};
-  const productLink = normalizeShopeeProductUrl(source.productLink || resolvedUrl);
-  const ids = extractShopeeIds(productLink);
+  const ids = extractShopeeIds(source.productLink || resolvedUrl);
 
   return {
     itemId: source.itemId || ids.itemId,
     shopId: source.shopId || ids.shopId,
-
     productName: source.productName || '',
     shopName: source.shopName || '',
     price: Number(source.price || 0),
     sales: Number(source.sales || 0),
     imageUrl: source.imageUrl || '',
-    productLink,
     rating: source.rating || '0',
-
     commission: Number(source.commission || 0),
-    sellerComFinal: Number(source.sellerComFinal || 0),
-    shopeeComFinal: Number(source.shopeeComFinal || 0),
-
     isXtra: Boolean(source.isXtra),
     hasSellerCommission: Boolean(source.hasSellerCommission),
     hasShopeeCommission: Boolean(source.hasShopeeCommission),
-    isCapped: Boolean(source.isCapped),
-    isLimitCap: Boolean(source.isLimitCap),
-
-    cap: Number(source.cap || 0),
-    capRaw: Number(source.capRaw || 0),
-    capAfterRate: Number(source.capAfterRate || 0),
-
-    lastUpdate: source.lastUpdate || '',
-    dataSource: source.dataSource || '',
-    priceStats: source.priceStats || null,
-    latestPriceHistory: source.latestPriceHistory || null,
   };
 }
 
@@ -134,7 +117,6 @@ export default async function handler(req, res) {
   if (!rawUrl) {
     return res.status(400).json({
       status: 'error',
-      success: false,
       error: 'Thieu tham so url',
     });
   }
@@ -149,20 +131,14 @@ export default async function handler(req, res) {
     }
 
     const data = await getProductData(resolvedUrl);
-    const productInfo = buildProductInfo(data, resolvedUrl);
 
     return res.status(200).json({
       status: 'success',
-      success: true,
-      originalUrl: rawUrl,
-      resolvedUrl,
-      fullUrl: productInfo.productLink,
-      productInfo,
+      productInfo: pickProductInfo(data, resolvedUrl),
     });
   } catch (error) {
     return res.status(500).json({
       status: 'error',
-      success: false,
       error: error.message,
     });
   }
