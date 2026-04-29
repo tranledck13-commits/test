@@ -11,14 +11,13 @@ function normalizeInputUrl(rawUrl) {
 function isShopeeShortUrl(rawUrl) {
   try {
     const hostname = new URL(normalizeInputUrl(rawUrl)).hostname.toLowerCase();
-
     return ['s.shopee.vn', 'shp.ee', 'vn.shp.ee'].includes(hostname);
   } catch {
     return false;
   }
 }
 
-function normalizeShopeeProductUrl(rawUrl) {
+function extractShopeeIds(rawUrl) {
   try {
     const parsed = new URL(normalizeInputUrl(rawUrl));
     const path = decodeURIComponent(parsed.pathname);
@@ -28,15 +27,21 @@ function normalizeShopeeProductUrl(rawUrl) {
       path.match(/\/[^/]+\/(\d+)\/(\d+)/) ||
       path.match(/-i\.(\d+)\.(\d+)/);
 
-    if (!match) return rawUrl;
+    if (!match) return { shopId: '', itemId: '' };
 
-    const shopId = match[1];
-    const itemId = match[2];
-
-    return `https://shopee.vn/product/${shopId}/${itemId}`;
+    return {
+      shopId: String(match[1]),
+      itemId: String(match[2]),
+    };
   } catch {
-    return rawUrl;
+    return { shopId: '', itemId: '' };
   }
+}
+
+function normalizeShopeeProductUrl(rawUrl) {
+  const { shopId, itemId } = extractShopeeIds(rawUrl);
+  if (!shopId || !itemId) return rawUrl;
+  return `https://shopee.vn/product/${shopId}/${itemId}`;
 }
 
 async function expandShortUrl(url) {
@@ -80,6 +85,44 @@ async function getProductData(shopeeUrl) {
   return await res.json();
 }
 
+function buildProductInfo(data, resolvedUrl) {
+  const source = data?.productInfo || {};
+  const productLink = normalizeShopeeProductUrl(source.productLink || resolvedUrl);
+  const ids = extractShopeeIds(productLink);
+
+  return {
+    itemId: source.itemId || ids.itemId,
+    shopId: source.shopId || ids.shopId,
+
+    productName: source.productName || '',
+    shopName: source.shopName || '',
+    price: Number(source.price || 0),
+    sales: Number(source.sales || 0),
+    imageUrl: source.imageUrl || '',
+    productLink,
+    rating: source.rating || '0',
+
+    commission: Number(source.commission || 0),
+    sellerComFinal: Number(source.sellerComFinal || 0),
+    shopeeComFinal: Number(source.shopeeComFinal || 0),
+
+    isXtra: Boolean(source.isXtra),
+    hasSellerCommission: Boolean(source.hasSellerCommission),
+    hasShopeeCommission: Boolean(source.hasShopeeCommission),
+    isCapped: Boolean(source.isCapped),
+    isLimitCap: Boolean(source.isLimitCap),
+
+    cap: Number(source.cap || 0),
+    capRaw: Number(source.capRaw || 0),
+    capAfterRate: Number(source.capAfterRate || 0),
+
+    lastUpdate: source.lastUpdate || '',
+    dataSource: source.dataSource || '',
+    priceStats: source.priceStats || null,
+    latestPriceHistory: source.latestPriceHistory || null,
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -90,37 +133,35 @@ export default async function handler(req, res) {
 
   if (!rawUrl) {
     return res.status(400).json({
+      status: 'error',
       success: false,
       error: 'Thieu tham so url',
     });
   }
 
   try {
-    let fullUrl = normalizeInputUrl(rawUrl);
+    let resolvedUrl = normalizeInputUrl(rawUrl);
 
-    if (isShopeeShortUrl(fullUrl)) {
-      fullUrl = await expandShortUrl(fullUrl);
+    if (isShopeeShortUrl(resolvedUrl)) {
+      resolvedUrl = await expandShortUrl(resolvedUrl);
     } else {
-      fullUrl = normalizeShopeeProductUrl(fullUrl);
+      resolvedUrl = normalizeShopeeProductUrl(resolvedUrl);
     }
 
-    const data = await getProductData(fullUrl);
-
-    const productInfo = data?.productInfo || {};
-    const productName = productInfo.productName || '';
-    const imageUrl = productInfo.imageUrl || '';
-    const productLink = normalizeShopeeProductUrl(productInfo.productLink || fullUrl);
+    const data = await getProductData(resolvedUrl);
+    const productInfo = buildProductInfo(data, resolvedUrl);
 
     return res.status(200).json({
+      status: 'success',
       success: true,
       originalUrl: rawUrl,
-      fullUrl: productLink,
-      resolvedUrl: fullUrl,
-      productName,
-      imageUrl,
+      resolvedUrl,
+      fullUrl: productInfo.productLink,
+      productInfo,
     });
   } catch (error) {
     return res.status(500).json({
+      status: 'error',
       success: false,
       error: error.message,
     });
