@@ -1,6 +1,14 @@
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36';
 
+function toNumber(value) {
+  if (value === null || value === undefined || value === '') return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const normalized = String(value).replace(/[^\d.,-]/g, '').replace(/\./g, '').replace(',', '.');
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : 0;
+}
+
 function normalizeInputUrl(rawUrl) {
   return String(rawUrl || '')
     .trim()
@@ -89,13 +97,44 @@ async function getProductData(shopeeUrl) {
 function pickProductInfo(data, resolvedUrl) {
   const source = data?.productInfo || {};
   const ids = extractShopeeIds(source.productLink || resolvedUrl);
+  const sellerCommissionRate = toNumber(
+    source.sellerCommissionRate ||
+    source.shopCommissionRate ||
+    source.seller_commission_rate ||
+    source.shop_commission_rate ||
+    source.seller_commission?.rate ||
+    source.shop_commission?.rate ||
+    0
+  );
+  const shopeeCommissionRate = toNumber(
+    source.shopeeCommissionRate ||
+    source.platformCommissionRate ||
+    source.shopee_commission_rate ||
+    source.platform_commission_rate ||
+    source.shopee_commission?.rate ||
+    0
+  );
+  const price = toNumber(source.price || 0);
+  const sellerCommissionAmount = toNumber(
+    source.sellerCommissionAmount ||
+    source.shopCommissionAmount ||
+    source.seller_commission?.amount ||
+    source.shop_commission?.amount ||
+    (price && sellerCommissionRate ? (price * sellerCommissionRate) / 100 : 0)
+  );
+  const shopeeCommissionAmount = toNumber(
+    source.shopeeCommissionAmount ||
+    source.platformCommissionAmount ||
+    source.shopee_commission?.amount ||
+    (price && shopeeCommissionRate ? (price * shopeeCommissionRate) / 100 : 0)
+  );
 
   return {
     itemId: source.itemId || ids.itemId,
     shopId: source.shopId || ids.shopId,
     productName: source.productName || '',
     shopName: source.shopName || '',
-    price: Number(source.price || 0),
+    price,
     sales: Number(source.sales || 0),
     imageUrl: source.imageUrl || '',
     rating: source.rating || '0',
@@ -103,6 +142,10 @@ function pickProductInfo(data, resolvedUrl) {
     isXtra: Boolean(source.isXtra),
     hasSellerCommission: Boolean(source.hasSellerCommission),
     hasShopeeCommission: Boolean(source.hasShopeeCommission),
+    sellerCommissionRate,
+    sellerCommissionAmount,
+    shopeeCommissionRate,
+    shopeeCommissionAmount,
   };
 }
 
