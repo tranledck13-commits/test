@@ -97,6 +97,9 @@ async function getProductData(shopeeUrl) {
 function pickProductInfo(data, resolvedUrl) {
   const source = data?.productInfo || {};
   const ids = extractShopeeIds(source.productLink || resolvedUrl);
+  const rawCommission = toNumber(source.commission || 0);
+  const inferredCommissionRate = rawCommission > 0 && rawCommission <= 100 ? rawCommission : 0;
+  const inferredCommissionAmount = rawCommission > 100 ? rawCommission : 0;
   const sellerCommissionRate = toNumber(
     source.sellerCommissionRate ||
     source.shopCommissionRate ||
@@ -104,7 +107,7 @@ function pickProductInfo(data, resolvedUrl) {
     source.shop_commission_rate ||
     source.seller_commission?.rate ||
     source.shop_commission?.rate ||
-    0
+    inferredCommissionRate
   );
   const shopeeCommissionRate = toNumber(
     source.shopeeCommissionRate ||
@@ -120,6 +123,7 @@ function pickProductInfo(data, resolvedUrl) {
     source.shopCommissionAmount ||
     source.seller_commission?.amount ||
     source.shop_commission?.amount ||
+    inferredCommissionAmount ||
     (price && sellerCommissionRate ? (price * sellerCommissionRate) / 100 : 0)
   );
   const shopeeCommissionAmount = toNumber(
@@ -138,7 +142,7 @@ function pickProductInfo(data, resolvedUrl) {
     sales: Number(source.sales || 0),
     imageUrl: source.imageUrl || '',
     rating: source.rating || '0',
-    commission: Number(source.commission || 0),
+    commission: rawCommission,
     isXtra: Boolean(source.isXtra),
     hasSellerCommission: Boolean(source.hasSellerCommission),
     hasShopeeCommission: Boolean(source.hasShopeeCommission),
